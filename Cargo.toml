@@ -1,0 +1,18 @@
+[package]
+name = "spotify-cli"
+version = "0.1.0"
+authors = ["John-Olav Storvold <johsto@knowit.no>"]
+
+[dependencies]
+clap = '*'
+reqwest = '*'
+hyper = '*'
+serde = '*'
+serde_derive = '*'
+serde_json = '*'
+url = '*'
+termion = '*'
+chrono = { version = '*', features = ["serde"] }
+time = '*'
+open = '*'
+uuid = { version = "0.6", features = ["serde", "v4"] }
