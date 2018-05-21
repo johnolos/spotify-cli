@@ -10,4 +10,6 @@ Control spotify through the terminal.
 Have a decent [tui](https://github.com/fdehau/tui-rs) which uses a fuzzy-matcher for selecting artists and albums.
 
 Spotify currently offers great api to controll your music, but not play it. The idea is to leave spotify playing
-in the background on your PC or control your [Spotify Connect](https://www.spotify.com/au/connect/)-supported equipment.
+in the background on your PC or control your [Spotify Connect](https://www.spotify.com/au/connect/)-supported equipment from your terminal.
+
+I do realize this is a niché for the odd folkes who live in the terminal - consider it a learn rust by doing project.
