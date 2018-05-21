@@ -1,2 +1,2 @@
 pub mod entities;
-pub mod player_api;
+pub mod player;

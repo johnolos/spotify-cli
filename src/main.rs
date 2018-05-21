@@ -12,7 +12,7 @@ extern crate url;
 extern crate open;
 extern crate uuid;
 
-use player::player_api::PlayerAPI;
+use player::player::PlayerAPI;
 use core::error::CliError;
 use core::entities::Credentials;
 use core::common::Authorize;
@@ -57,12 +57,16 @@ fn main() -> Result<(), CliError> {
 
 
 
-    let credentials = Credentials::new(client_id, secret, code);
+    let ref credentials = Credentials::new(client_id, secret, code);
+
+    let ref authorize = Authorize::new();
+
+    let ref player_api = PlayerAPI::new(authorize);
 
 
     if let Some(matches) = matches.subcommand_matches("player") {
 
-        let devices = match PlayerAPI::get_devices(credentials) {
+        let devices = match player_api.get_devices(credentials) {
             Ok(devices) => devices,
             Err(e) =>
                 return Err(CliError::new(&format!("{}", e), color))

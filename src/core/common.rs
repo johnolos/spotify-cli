@@ -6,12 +6,24 @@ use serde_json;
 use std::collections::HashMap;
 use url::Url;
 use std::process;
+use std::sync::RwLock;
 use uuid::Uuid;
 use open;
 
-pub trait Authorize {}
+pub struct Authorize {
+    token: RwLock<Option<Token>>,
+}
 
 impl Authorize {
+    pub fn new() -> Authorize {
+        Authorize { token: RwLock::new(None) }
+    }
+
+    pub fn update_token(&mut self, new_token: Token) {
+        let mut token = self.token.write().unwrap();
+        *token = Some(new_token);
+    }
+
     pub fn get_authorization(client_id: String) -> Result<AuthorizationCode, Error> {
         let mut url = Url::parse("https://accounts.spotify.com/authorize").unwrap();
 
@@ -47,7 +59,7 @@ impl Authorize {
     }
 
 
-    pub fn get_token(credentials: Credentials) -> Result<Response, Error> {
+    pub fn get_token(credentials: &Credentials) -> Result<Response, Error> {
 
         let url = Url::parse("https://accounts.spotify.com/api/token").unwrap();
 
@@ -61,8 +73,6 @@ impl Authorize {
         }));
 
         let client = Client::builder().default_headers(headers).build()?;
-
-        println!("{}", "I got here");
 
         return client.post(&url.to_string()).body(format!("grant_type=authorization_code&code={}&redirect_uri=http://127.0.0.1", credentials.code)).send();
     }
@@ -78,8 +88,9 @@ impl Authorize {
     }
 
     pub fn get_request(
+        &self,
         url: Url,
-        credentials: Credentials,
+        credentials: &Credentials,
         params: Option<HashMap<&str, String>>,
     ) -> Result<Response, Error> {
 
@@ -106,7 +117,7 @@ impl Authorize {
 
     pub fn post_request(
         url: Url,
-        credentials: Credentials,
+        credentials: &Credentials,
         object: impl Serialize,
     ) -> Result<Response, Error> {
 
