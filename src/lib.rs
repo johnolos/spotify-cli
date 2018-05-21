@@ -11,6 +11,7 @@ extern crate time;
 extern crate url;
 extern crate open;
 extern crate uuid;
+extern crate regex;
 
 pub mod cli;
 pub mod player;

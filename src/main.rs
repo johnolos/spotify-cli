@@ -11,12 +11,14 @@ extern crate time;
 extern crate url;
 extern crate open;
 extern crate uuid;
+extern crate regex;
 
 use player::player::PlayerAPI;
 use core::error::CliError;
 use core::entities::Credentials;
 use core::common::Authorize;
 use std::env;
+use std::sync::{Arc, RwLock};
 use std::process;
 use clap::App;
 
@@ -33,7 +35,7 @@ fn main() -> Result<(), CliError> {
 
     let color = true;
 
-    let client_id: String = match env::var("SPOTIFY_CLIENT_ID") {
+    let ref client_id: String = match env::var("SPOTIFY_CLIENT_ID") {
         Ok(client_id) => client_id,
         Err(_) => {
             return Err(CliError::new("env SPOTIFY_CLIENT_ID was missing{}", color));
@@ -50,16 +52,16 @@ fn main() -> Result<(), CliError> {
     let code: String = match env::var("SPOTIFY_CODE") {
         Ok(secret) => secret,
         Err(_) => {
-            let code = Authorize::get_authorization(client_id);
-            return process::exit(0x0001)
+            match Authorize::get_authorization(client_id) {
+                Ok(code) => code,
+                Err(_) => return Err(CliError::new("code was neither in envs nor able to retrieve it", color))
+            }
         }
     };
 
+    let ref credentials = Credentials::new(client_id.to_string(), secret, code);
 
-
-    let ref credentials = Credentials::new(client_id, secret, code);
-
-    let ref authorize = Authorize::new();
+    let ref authorize = Authorize::new(Arc::new(RwLock::new(None)));
 
     let ref player_api = PlayerAPI::new(authorize);
 

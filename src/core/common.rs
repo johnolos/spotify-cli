@@ -1,4 +1,4 @@
-use core::entities::{Token, Credentials, AuthorizationCode};
+use core::entities::{Token, Credentials};
 use hyper::header::{Accept, Authorization, Basic, Bearer, ContentType, Headers, UserAgent};
 use reqwest::{Client, Response, Error};
 use serde::Serialize;
@@ -6,31 +6,34 @@ use serde_json;
 use std::collections::HashMap;
 use url::Url;
 use std::process;
-use std::sync::RwLock;
+use std::io;
+use std::mem;
+use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 use open;
+use regex::Regex;
+
 
 pub struct Authorize {
-    token: RwLock<Option<Token>>,
+    token: Arc<RwLock<Option<Token>>>,
 }
 
 impl Authorize {
-    pub fn new() -> Authorize {
-        Authorize { token: RwLock::new(None) }
+    pub fn new(token: Arc<RwLock<Option<Token>>>) -> Authorize {
+        Authorize { token }
     }
 
-    pub fn update_token(&mut self, new_token: Token) {
-        let mut token = self.token.write().unwrap();
-        *token = Some(new_token);
+    pub fn set_token(self, new_token: Token) {
+        mem::replace(&mut self.token.write().unwrap().unwrap(), new_token);
     }
 
-    pub fn get_authorization(client_id: String) -> Result<AuthorizationCode, Error> {
+    pub fn get_authorization(client_id: &String) -> Result<String, Error> {
         let mut url = Url::parse("https://accounts.spotify.com/authorize").unwrap();
 
         let uuid = Uuid::new_v4().to_string();
 
         url.query_pairs_mut()
-            .append_pair("client_id", &client_id)
+            .append_pair("client_id", client_id)
             .append_pair("response_type", "code")
             .append_pair("redirect_uri", "http://127.0.0.1")
             .append_pair("state", &uuid)
@@ -49,17 +52,50 @@ impl Authorize {
             .append_pair("show_dialog", "false");
 
         match open::that(url.to_string()) {
-            Ok(_) => println!("Check your browser:"),
+            Ok(_) => println!("Check your browser!"),
             Err(_) => {
                 println!("Open the following url in your browser of choice: {}", url.to_string());
             }
         };
 
-        return Ok(AuthorizationCode::new("code".to_string()));
+        println!("Once you're authenticated - copy url from the redirect and paste it here");
+
+        print!(">>> ");
+
+        let mut redirect_line = String::new();
+
+        match io::stdin().read_line(&mut redirect_line) {
+            Ok(_n) => {
+                println!("{}", redirect_line)
+            },
+            Err(e) => {
+                println!("error: {}", e);
+                process::exit(0x0001)
+            }
+        }
+
+        let re = Regex::new(r"\??((?P<query>\w*)=)(?P<value>[^&\n]*)?").unwrap();
+        let mut query_params = HashMap::new();
+
+
+        for caps in re.captures_iter(&redirect_line) {
+            query_params.insert(caps["query"].to_string(), caps["value"].to_string());
+        }
+
+        let code = query_params.get("code").unwrap();
+        let state = query_params.get("state").unwrap();
+
+        println!("code={}", code);
+        println!("state={}", state);
+
+        if !state.eq(&uuid.to_string()) {
+            eprintln!("Error: The received state did not match.");
+        }
+
+        Ok(code.to_string())
     }
 
-
-    pub fn get_token(credentials: &Credentials) -> Result<Response, Error> {
+    pub fn update_token(self, credentials: &Credentials) -> Result<(), Error> {
 
         let url = Url::parse("https://accounts.spotify.com/api/token").unwrap();
 
@@ -74,37 +110,45 @@ impl Authorize {
 
         let client = Client::builder().default_headers(headers).build()?;
 
-        return client.post(&url.to_string()).body(format!("grant_type=authorization_code&code={}&redirect_uri=http://127.0.0.1", credentials.code)).send();
+        let request = client
+            .post(&url.to_string())
+            .body(format!("\
+             grant_type=authorization_code&\
+             code={}&\
+             redirect_uri=http://127.0.0.1", credentials.code))
+            .send();
+
+        let new_token = request?.json::<Token>()?;
+
+        self.set_token(new_token);
+
+        println!("Updated token");
+        Ok(())
     }
 
-    fn construct_headers(token: String) -> Headers {
+    fn construct_headers(self, credentials: &Credentials) -> Result<Headers, Error> {
+        self.update_token(&credentials);
+
+        let token = self.token.read().unwrap().unwrap().access_token;
+
+
         let mut headers = Headers::new();
 
         headers.set(UserAgent::new("spot-cli/0.1.0"));
         headers.set(ContentType::json());
         headers.set(Authorization(Bearer { token }));
 
-        return headers;
+        return Ok(headers);
     }
 
     pub fn get_request(
-        &self,
+        self,
         url: Url,
         credentials: &Credentials,
         params: Option<HashMap<&str, String>>,
     ) -> Result<Response, Error> {
 
-//        let response = Authorize::get_token(credentials)?;
-//
-//        println!("{:?}", response.text());
-//
-//        return process::exit(0x0001);
-
-        let token: Token = Authorize::get_token(credentials)?.json::<Token>()?;
-
-//        println!("{:?}", token);
-
-        let headers = Authorize::construct_headers(token.access_token);
+        let headers = self.construct_headers(credentials)?;
 
         let client = Client::builder().default_headers(headers).build()?;
 
@@ -116,14 +160,13 @@ impl Authorize {
     }
 
     pub fn post_request(
+        self,
         url: Url,
         credentials: &Credentials,
         object: impl Serialize,
     ) -> Result<Response, Error> {
 
-        let token: Token = Authorize::get_token(credentials)?.json::<Token>()?;
-
-        let headers = Authorize::construct_headers(token.access_token);
+        let headers = self.construct_headers(credentials)?;
 
         let client = Client::builder().default_headers(headers).build()?;
 
